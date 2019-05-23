@@ -20,7 +20,6 @@ import org.springframework.stereotype.Service;
 
 import com.cloudera.api.swagger.ClustersResourceApi;
 import com.cloudera.api.swagger.HostTemplatesResourceApi;
-import com.cloudera.api.swagger.HostsResourceApi;
 import com.cloudera.api.swagger.ServicesResourceApi;
 import com.cloudera.api.swagger.client.ApiClient;
 import com.cloudera.api.swagger.client.ApiException;
@@ -239,13 +238,12 @@ public class ClouderaManagerModificationService implements ClusterModificationSe
 
     @Override
     public Map<String, String> gatherInstalledComponents(String hostname) {
-        HostsResourceApi hostsResourceApi = clouderaManagerClientFactory.getHostsResourceApi(client);
+        ServicesResourceApi servicesResourceApi = clouderaManagerClientFactory.getServicesResourceApi(client);
         try {
             Map<String, String> result = Maps.newHashMap();
-            hostsResourceApi.readHosts(FULL_VIEW).getItems().stream()
-                    .filter(host -> host.getHostname().contentEquals(hostname))
-                    .findFirst().get().getRoleRefs().stream()
-                    .forEach(roleRef -> result.put(roleRef.getServiceName(), "valami"));
+            servicesResourceApi.readServices(stack.getName(), FULL_VIEW).getItems().stream()
+                    .filter(service -> service.getRoles().stream().filter(role -> role.getHostRef().getHostname().contentEquals(hostname)).findFirst().isPresent())
+                    .forEach(service -> result.put(service.getName(), service.getType()));
             return result;
         } catch (ApiException e) {
             // TODO
@@ -287,7 +285,20 @@ public class ClouderaManagerModificationService implements ClusterModificationSe
 
     @Override
     public void installComponents(Map<String, String> components, String hostname) {
-
+//        ServicesResourceApi servicesResourceApi = clouderaManagerClientFactory.getServicesResourceApi(client);
+//        ApiServiceList body = new ApiServiceList();
+//        body.setItems(Lists.newArrayList());
+//        components.entrySet().stream().forEach(entry -> {
+//            ApiService apiService = new ApiService();
+//            apiService.setName(entry.getKey());
+//            apiService.setType(entry.getValue());
+//            body.getItems().add(apiService);
+//        });
+//        try {
+//            servicesResourceApi.createServices(stack.getName(), body);
+//        } catch (ApiException e) {
+//            // TODO
+//        }
     }
 
     @Override
@@ -297,7 +308,17 @@ public class ClouderaManagerModificationService implements ClusterModificationSe
 
     @Override
     public void startComponents(Map<String, String> components, String hostname) {
-
+        ServicesResourceApi servicesResourceApi = clouderaManagerClientFactory.getServicesResourceApi(client);
+        components.keySet().stream().forEach(component -> {
+            try {
+                ApiService apiService = servicesResourceApi.readService(stack.getName(), component, FULL_VIEW);
+                if (!apiService.getServiceState().equals(ApiServiceState.STOPPED)) {
+                    servicesResourceApi.startCommand(stack.getName(), component);
+                }
+            } catch (ApiException e) {
+                // TODO
+            }
+        });
     }
 
     @Override
